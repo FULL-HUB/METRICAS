@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Dinámico - Google Sheets</title>
+  
+  <!-- Chart.js para gráficos -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- PapaParse para lectura robusta de CSV -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #111827;
+      --card-bg: #1f2937;
+      --text: #ffffff;
+      --accent: #3b82f6;
+    }
+
+    body.epaper {
+      background: #ffffff !important;
+      color: #000000 !important;
+      font-family: monospace;
+    }
+    body.epaper .card {
+      background: #ffffff !important;
+      border: 2px solid #000000 !important;
+      color: #000000 !important;
+      box-shadow: none !important;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    h1 { margin-bottom: 15px; font-size: 1.4rem; text-align: center; font-weight: 800; letter-spacing: 0.5px; }
+
+    .container {
+      width: 100%;
+      max-width: 1000px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 10px;
+      padding: 15px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+
+    .card .title { font-size: 0.8rem; opacity: 0.8; text-transform: uppercase; margin-bottom: 8px; font-weight: 600; }
+    .card .value { font-size: 1.8rem; font-weight: 800; color: var(--accent); }
+    body.epaper .card .value { color: #000 !important; }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 15px;
+    }
+
+    .chart-card {
+      background: var(--card-bg);
+      border-radius: 10px;
+      padding: 15px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+      height: 260px;
+      position: relative;
+    }
+
+    .footer { margin-top: 20px; font-size: 0.8rem; opacity: 0.7; text-align: center; max-width: 600px; }
+    .error-msg { color: #ef4444; font-weight: bold; background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+
+  <h1>DASHBOARD DE CONTROL</h1>
+
+  <div class="container">
+    <div class="metrics-grid" id="kpiContainer">
+      <div class="card"><div class="title">Estado</div><div class="value">Cargando...</div></div>
+    </div>
+
+    <div class="charts-grid" id="chartsContainer"></div>
+  </div>
+
+  <div class="footer" id="lastUpdated">Conectando a Google Sheets...</div>
+
+  <script>
+    const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSMlP6S4dwKVU-O4VEObfKXa9MPQM04UzOk0hypRTPb_8xukW3HX2SOD6mj4kQW1geSMjBVURwNqAJ-/pub?gid=740496934&single=true&output=csv";
+
+    const isEPaper = window.location.search.includes("mode=epaper");
+    if (isEPaper) document.body.classList.add("epaper");
+
+    const chartColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+    const chartInstances = [];
+
+    function loadDashboard() {
+      // Advertencia si se ejecuta directo desde el disco (file://)
+      if (window.location.protocol === 'file:') {
+        console.warn("Atención: Abrir el archivo directamente desde el disco puede causar bloqueos de CORS en Chrome.");
+      }
+
+      Papa.parse(SHEET_CSV_URL, {
+        download: true,
+        header: false,
+        skipEmptyLines: true,
+        complete: function(results) {
+          try {
+            const rows = results.data;
+            if (!rows || rows.length < 2) {
+              showError("La planilla no contiene suficientes datos.");
+              return;
+            }
+
+            const headers = rows[0];
+            const latestData = rows[rows.length - 1];
+
+            // 1. DIBUJAR TARJETAS KPI
+            const kpiContainer = document.getElementById('kpiContainer');
+            kpiContainer.innerHTML = '';
+
+            for (let c = 1; c < headers.length; c++) {
+              if (!headers[c]) continue;
+              const card = document.createElement('div');
+              card.className = 'card';
+              card.innerHTML = `
+                <div class="title">${headers[c]}</div>
+                <div class="value">${latestData[c] !== undefined ? latestData[c] : '-'}</div>
+              `;
+              kpiContainer.appendChild(card);
+            }
+
+            // 2. DIBUJAR GRÁFICOS
+            const chartsContainer = document.getElementById('chartsContainer');
+            chartsContainer.innerHTML = '';
+
+            chartInstances.forEach(chart => chart.destroy());
+            chartInstances.length = 0;
+
+            const labels = [];
+            const datasets = [];
+
+            for (let c = 1; c < headers.length; c++) {
+              if (headers[c]) datasets.push([]);
+            }
+
+            for (let r = 1; r < rows.length; r++) {
+              labels.push(rows[r][0]); // Columna 0 = Fechas / Etiquetas
+              let datasetIndex = 0;
+              for (let c = 1; c < headers.length; c++) {
+                if (!headers[c]) continue;
+                // Convertir valores a números si es posible
+                let rawVal = rows[r][c];
+                let numVal = parseFloat(rawVal ? rawVal.replace(',', '.') : 0);
+                datasets[datasetIndex].push(isNaN(numVal) ? 0 : numVal);
+                datasetIndex++;
+              }
+            }
+
+            const textColor = isEPaper ? "#000000" : "#ffffff";
+            const gridColor = isEPaper ? "#000000" : "#374151";
+
+            datasetIndex = 0;
+            for (let c = 1; c < headers.length; c++) {
+              if (!headers[c]) continue;
+
+              const div = document.createElement('div');
+              div.className = 'chart-card';
+              const canvas = document.createElement('canvas');
+              div.appendChild(canvas);
+              chartsContainer.appendChild(div);
+
+              const lineColor = isEPaper ? "#000000" : chartColors[datasetIndex % chartColors.length];
+              const fillColor = isEPaper ? "transparent" : `${lineColor}22`;
+
+              const chart = new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                  labels: labels,
+                  datasets: [{
+                    label: headers[c],
+                    data: datasets[datasetIndex],
+                    borderColor: lineColor,
+                    backgroundColor: fillColor,
+                    borderWidth: isEPaper ? 3 : 2,
+                    pointBackgroundColor: lineColor,
+                    pointRadius: isEPaper ? 3 : 2,
+                    fill: !isEPaper,
+                    tension: 0.3
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  animation: !isEPaper,
+                  plugins: {
+                    legend: { labels: { color: textColor, font: { weight: 'bold' } } }
+                  },
+                  scales: {
+                    x: { ticks: { color: textColor }, grid: { color: gridColor, lineWidth: isEPaper ? 1 : 0.2 } },
+                    y: { ticks: { color: textColor }, grid: { color: gridColor, lineWidth: isEPaper ? 1 : 0.2 } }
+                  }
+                }
+              });
+
+              chartInstances.push(chart);
+              datasetIndex++;
+            }
+
+            const now = new Date();
+            document.getElementById("lastUpdated").innerText = `Actualizado: ${now.toLocaleTimeString()}`;
+          } catch (e) {
+            showError("Error procesando las columnas de la planilla.");
+          }
+        },
+        error: function(err) {
+          if (window.location.protocol === 'file:') {
+            showError("Bloqueo de seguridad local (CORS). Subí el archivo a GitHub Pages para que funcione correctamente.");
+          } else {
+            showError("No se pudo descargar la planilla de Google Sheets.");
+          }
+        }
+      });
+    }
+
+    function showError(msg) {
+      document.getElementById("lastUpdated").innerHTML = `<span class="error-msg">${msg}</span>`;
+    }
+
+    loadDashboard();
+    setInterval(loadDashboard, 300000);
+  </script>
+</body>
+</html>
