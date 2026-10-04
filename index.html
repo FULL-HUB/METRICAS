@@ -3,38 +3,41 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard Dinámico - Google Sheets</title>
+  <title>PEDIDOS INTERNOS (VENTAS)</title>
   
   <!-- Chart.js para gráficos -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- PapaParse para lectura robusta de CSV -->
+  <!-- PapaParse para lectura del CSV de Google Sheets -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
   <style>
     :root {
-      --bg: #111827;
-      --card-bg: #1f2937;
-      --text: #ffffff;
-      --accent: #3b82f6;
+      --bg-color: #ffffff;
+      --card-bg: #ffffff;
+      --text-main: #202124;
+      --text-muted: #5f6368;
+      --border-color: #dadce0;
+      --blue: #4285f4;
+      --red: #ea4335;
+      --yellow: #fbbc04;
     }
 
+    /* Modo ePaper (Alto contraste monocromático) */
     body.epaper {
-      background: #ffffff !important;
-      color: #000000 !important;
+      --bg-color: #ffffff !important;
+      --card-bg: #ffffff !important;
+      --text-main: #000000 !important;
+      --text-muted: #000000 !important;
+      --border-color: #000000 !important;
       font-family: monospace;
-    }
-    body.epaper .card {
-      background: #ffffff !important;
-      border: 2px solid #000000 !important;
-      color: #000000 !important;
-      box-shadow: none !important;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    
     body {
-      font-family: system-ui, -apple-system, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
       padding: 20px;
       display: flex;
       flex-direction: column;
@@ -42,211 +45,409 @@
       min-height: 100vh;
     }
 
-    h1 { margin-bottom: 15px; font-size: 1.4rem; text-align: center; font-weight: 800; letter-spacing: 0.5px; }
-
-    .container {
+    .dashboard-container {
       width: 100%;
-      max-width: 1000px;
+      max-width: 1100px;
       display: flex;
       flex-direction: column;
       gap: 20px;
     }
 
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    /* ENCABEZADO Y KPIS */
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      border-bottom: 2px solid var(--border-color);
+      padding-bottom: 15px;
+      flex-wrap: wrap;
       gap: 15px;
     }
 
-    .card {
-      background: var(--card-bg);
-      border-radius: 10px;
-      padding: 15px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-      text-align: center;
+    .title-area h1 {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--text-main);
+      letter-spacing: -0.5px;
     }
 
-    .card .title { font-size: 0.8rem; opacity: 0.8; text-transform: uppercase; margin-bottom: 8px; font-weight: 600; }
-    .card .value { font-size: 1.8rem; font-weight: 800; color: var(--accent); }
-    body.epaper .card .value { color: #000 !important; }
+    .title-area .dates {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      margin-top: 5px;
+    }
 
-    .charts-grid {
+    .kpi-group {
+      display: flex;
+      gap: 30px;
+      align-items: flex-end;
+    }
+
+    .kpi-card {
+      text-align: left;
+    }
+
+    .kpi-card .label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .kpi-card .val {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1.1;
+    }
+
+    /* GRILLA DE GRÁFICOS */
+    .grid-2 {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 15px;
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 20px;
     }
 
-    .chart-card {
+    .chart-box {
       background: var(--card-bg);
-      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
       padding: 15px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-      height: 260px;
+      height: 320px;
       position: relative;
     }
 
-    .footer { margin-top: 20px; font-size: 0.8rem; opacity: 0.7; text-align: center; max-width: 600px; }
-    .error-msg { color: #ef4444; font-weight: bold; background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px; }
+    .chart-box h3 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+
+    .chart-inner {
+      position: relative;
+      height: 250px;
+      width: 100%;
+    }
+
+    .footer {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 15px;
+    }
+
+    @media (max-width: 600px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .kpi-group { gap: 15px; flex-wrap: wrap; }
+      .kpi-card .val { font-size: 1.6rem; }
+    }
   </style>
 </head>
 <body>
 
-  <h1>DASHBOARD DE CONTROL</h1>
-
-  <div class="container">
-    <div class="metrics-grid" id="kpiContainer">
-      <div class="card"><div class="title">Estado</div><div class="value">Cargando...</div></div>
+<div class="dashboard-container">
+  
+  <!-- ENCABEZADO Y KPIS SUPERIORES -->
+  <div class="header-row">
+    <div class="title-area">
+      <h1>PEDIDOS INTERNOS (VENTAS)</h1>
+      <div class="dates" id="dateRange">Fecha Desde: --/--/---- &nbsp;|&nbsp; Fecha Hasta: --/--/----</div>
     </div>
 
-    <div class="charts-grid" id="chartsContainer"></div>
+    <div class="kpi-group">
+      <div class="kpi-card">
+        <div class="label">PEDIDOS:</div>
+        <div class="val" id="kpiPedidos">0</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">VENTAS NETAS USD:</div>
+        <div class="val" id="kpiVentas">$0</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">TICKET PROMEDIO:</div>
+        <div class="val" id="kpiTicket">$0</div>
+      </div>
+    </div>
   </div>
 
-  <div class="footer" id="lastUpdated">Conectando a Google Sheets...</div>
+  <!-- FILA 1: EVOLUCIÓN DE VENTAS (Monto + Acumulado) -->
+  <div class="chart-box" style="height: 300px;">
+    <h3>VENTAS POR FECHA (MONTO Y ACUMULADO)</h3>
+    <div class="chart-inner" style="height: 230px;">
+      <canvas id="chartVentasFecha"></canvas>
+    </div>
+  </div>
 
-  <script>
-    const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSMlP6S4dwKVU-O4VEObfKXa9MPQM04UzOk0hypRTPb_8xukW3HX2SOD6mj4kQW1geSMjBVURwNqAJ-/pub?gid=740496934&single=true&output=csv";
+  <!-- FILA 2: MONTO POR PEDIDO/CLIENTE + TORTA POR CLIENTE -->
+  <div class="grid-2">
+    <div class="chart-box">
+      <h3>MONTO POR PEDIDO</h3>
+      <div class="chart-inner">
+        <canvas id="chartMontoClienteBar"></canvas>
+      </div>
+    </div>
+    <div class="chart-box">
+      <h3>MONTO POR CLIENTE</h3>
+      <div class="chart-inner">
+        <canvas id="chartMontoClientePie"></canvas>
+      </div>
+    </div>
+  </div>
 
-    const isEPaper = window.location.search.includes("mode=epaper");
-    if (isEPaper) document.body.classList.add("epaper");
+  <!-- FILA 3: VENDEDORES (MONTO USD Y CANTIDAD) -->
+  <div class="grid-2">
+    <div class="chart-box">
+      <h3>PEDIDOS POR VENDEDOR MONTO (USD)</h3>
+      <div class="chart-inner">
+        <canvas id="chartVendedorMonto"></canvas>
+      </div>
+    </div>
+    <div class="chart-box">
+      <h3>CANTIDAD DE PEDIDOS POR VENDEDOR</h3>
+      <div class="chart-inner">
+        <canvas id="chartVendedorCantidad"></canvas>
+      </div>
+    </div>
+  </div>
 
-    const chartColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-    const chartInstances = [];
+  <div class="footer" id="lastUpdated">Cargando datos desde Google Sheets...</div>
+</div>
 
-    function loadDashboard() {
-      // Advertencia si se ejecuta directo desde el disco (file://)
-      if (window.location.protocol === 'file:') {
-        console.warn("Atención: Abrir el archivo directamente desde el disco puede causar bloqueos de CORS en Chrome.");
-      }
+<script>
+  // Link de la planilla CSV publicado
+  const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSMlP6S4dwKVU-O4VEObfKXa9MPQM04UzOk0hypRTPb_8xukW3HX2SOD6mj4kQW1geSMjBVURwNqAJ-/pub?gid=740496934&single=true&output=csv";
 
-      Papa.parse(SHEET_CSV_URL, {
-        download: true,
-        header: false,
-        skipEmptyLines: true,
-        complete: function(results) {
-          try {
-            const rows = results.data;
-            if (!rows || rows.length < 2) {
-              showError("La planilla no contiene suficientes datos.");
-              return;
-            }
+  const isEPaper = window.location.search.includes("mode=epaper");
+  if (isEPaper) document.body.classList.add("epaper");
 
-            const headers = rows[0];
-            const latestData = rows[rows.length - 1];
+  const GOOGLE_COLORS = ['#4285f4', '#ea4335', '#fbbc04', '#34a853', '#ff6d01', '#46bdc6'];
+  const chartInstances = {};
 
-            // 1. DIBUJAR TARJETAS KPI
-            const kpiContainer = document.getElementById('kpiContainer');
-            kpiContainer.innerHTML = '';
+  function formatUSD(num) {
+    return '$' + Math.round(num).toLocaleString('en-US');
+  }
 
-            for (let c = 1; c < headers.length; c++) {
-              if (!headers[c]) continue;
-              const card = document.createElement('div');
-              card.className = 'card';
-              card.innerHTML = `
-                <div class="title">${headers[c]}</div>
-                <div class="value">${latestData[c] !== undefined ? latestData[c] : '-'}</div>
-              `;
-              kpiContainer.appendChild(card);
-            }
-
-            // 2. DIBUJAR GRÁFICOS
-            const chartsContainer = document.getElementById('chartsContainer');
-            chartsContainer.innerHTML = '';
-
-            chartInstances.forEach(chart => chart.destroy());
-            chartInstances.length = 0;
-
-            const labels = [];
-            const datasets = [];
-
-            for (let c = 1; c < headers.length; c++) {
-              if (headers[c]) datasets.push([]);
-            }
-
-            for (let r = 1; r < rows.length; r++) {
-              labels.push(rows[r][0]); // Columna 0 = Fechas / Etiquetas
-              let datasetIndex = 0;
-              for (let c = 1; c < headers.length; c++) {
-                if (!headers[c]) continue;
-                // Convertir valores a números si es posible
-                let rawVal = rows[r][c];
-                let numVal = parseFloat(rawVal ? rawVal.replace(',', '.') : 0);
-                datasets[datasetIndex].push(isNaN(numVal) ? 0 : numVal);
-                datasetIndex++;
-              }
-            }
-
-            const textColor = isEPaper ? "#000000" : "#ffffff";
-            const gridColor = isEPaper ? "#000000" : "#374151";
-
-            datasetIndex = 0;
-            for (let c = 1; c < headers.length; c++) {
-              if (!headers[c]) continue;
-
-              const div = document.createElement('div');
-              div.className = 'chart-card';
-              const canvas = document.createElement('canvas');
-              div.appendChild(canvas);
-              chartsContainer.appendChild(div);
-
-              const lineColor = isEPaper ? "#000000" : chartColors[datasetIndex % chartColors.length];
-              const fillColor = isEPaper ? "transparent" : `${lineColor}22`;
-
-              const chart = new Chart(canvas.getContext('2d'), {
-                type: 'line',
-                data: {
-                  labels: labels,
-                  datasets: [{
-                    label: headers[c],
-                    data: datasets[datasetIndex],
-                    borderColor: lineColor,
-                    backgroundColor: fillColor,
-                    borderWidth: isEPaper ? 3 : 2,
-                    pointBackgroundColor: lineColor,
-                    pointRadius: isEPaper ? 3 : 2,
-                    fill: !isEPaper,
-                    tension: 0.3
-                  }]
-                },
-                options: {
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  animation: !isEPaper,
-                  plugins: {
-                    legend: { labels: { color: textColor, font: { weight: 'bold' } } }
-                  },
-                  scales: {
-                    x: { ticks: { color: textColor }, grid: { color: gridColor, lineWidth: isEPaper ? 1 : 0.2 } },
-                    y: { ticks: { color: textColor }, grid: { color: gridColor, lineWidth: isEPaper ? 1 : 0.2 } }
-                  }
-                }
-              });
-
-              chartInstances.push(chart);
-              datasetIndex++;
-            }
-
-            const now = new Date();
-            document.getElementById("lastUpdated").innerText = `Actualizado: ${now.toLocaleTimeString()}`;
-          } catch (e) {
-            showError("Error procesando las columnas de la planilla.");
-          }
-        },
-        error: function(err) {
-          if (window.location.protocol === 'file:') {
-            showError("Bloqueo de seguridad local (CORS). Subí el archivo a GitHub Pages para que funcione correctamente.");
-          } else {
-            showError("No se pudo descargar la planilla de Google Sheets.");
-          }
+  function loadDashboard() {
+    Papa.parse(SHEET_CSV_URL, {
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: function(results) {
+        try {
+          const rawData = results.data;
+          processAndRender(rawData);
+        } catch (err) {
+          document.getElementById('lastUpdated').innerText = "Error procesando los datos de la planilla.";
         }
-      });
+      },
+      error: function() {
+        document.getElementById('lastUpdated').innerText = "Error al descargar los datos de Google Sheets.";
+      }
+    });
+  }
+
+  function processAndRender(data) {
+    if (!data || data.length === 0) return;
+
+    // Detectar nombres de columnas de la planilla dinámicamente
+    const keys = Object.keys(data[0]);
+    const colFecha = keys.find(k => k.toLowerCase().includes('fecha')) || keys[0];
+    const colMonto = keys.find(k => k.toLowerCase().includes('monto') || k.toLowerCase().includes('usd') || k.toLowerCase().includes('total')) || keys[1];
+    const colCliente = keys.find(k => k.toLowerCase().includes('cliente') || k.toLowerCase().includes('razon')) || keys[2];
+    const colVendedor = keys.find(k => k.toLowerCase().includes('vendedor')) || keys[3];
+
+    let totalVentas = 0;
+    let totalPedidos = 0;
+    const fechas = [];
+    const clientesMonto = {};
+    const vendedoresMonto = {};
+    const vendedoresCant = {};
+    const ventasPorFecha = {};
+
+    data.forEach(row => {
+      const fecha = row[colFecha] ? row[colFecha].trim() : '';
+      const cliente = row[colCliente] ? row[colCliente].trim() : 'Otros';
+      const vendedor = row[colVendedor] ? row[colVendedor].trim() : 'Sin Asignar';
+      
+      // Limpiar monto string a float (ej: "$16,395" -> 16395)
+      let rawMonto = row[colMonto] || '0';
+      let monto = parseFloat(rawMonto.replace(/[^0-9.-]+/g,"")) || 0;
+
+      if (monto > 0 || fecha !== '') {
+        totalPedidos++;
+        totalVentas += monto;
+
+        if (fecha) fechas.push(fecha);
+
+        // Agrupar por fecha
+        if (fecha) {
+          ventasPorFecha[fecha] = (ventasPorFecha[fecha] || 0) + monto;
+        }
+
+        // Agrupar por cliente
+        clientesMonto[cliente] = (clientesMonto[cliente] || 0) + monto;
+
+        // Agrupar por vendedor
+        vendedoresMonto[vendedor] = (vendedoresMonto[vendedor] || 0) + monto;
+        vendedoresCant[vendedor] = (vendedoresCant[vendedor] || 0) + 1;
+      }
+    });
+
+    // 1. ACTUALIZAR KPIS SUPERIORES
+    document.getElementById('kpiPedidos').innerText = totalPedidos;
+    document.getElementById('kpiVentas').innerText = formatUSD(totalVentas);
+    document.getElementById('kpiTicket').innerText = totalPedidos > 0 ? formatUSD(totalVentas / totalPedidos) : '$0';
+
+    if (fechas.length > 0) {
+      document.getElementById('dateRange').innerText = `Fecha Desde: ${fechas[0]}   |   Fecha Hasta: ${fechas[fechas.length - 1]}`;
     }
 
-    function showError(msg) {
-      document.getElementById("lastUpdated").innerHTML = `<span class="error-msg">${msg}</span>`;
-    }
+    // 2. DIBUJAR GRÁFICOS
+    renderVentasFechaChart(ventasPorFecha);
+    renderMontoClienteBarChart(clientesMonto);
+    renderMontoClientePieChart(clientesMonto);
+    renderVendedorMontoChart(vendedoresMonto);
+    renderVendedorCantidadChart(vendedoresCant);
 
-    loadDashboard();
-    setInterval(loadDashboard, 300000);
-  </script>
+    const now = new Date();
+    document.getElementById('lastUpdated').innerText = `Google Sheets · Sincronizado a las ${now.toLocaleTimeString()}`;
+  }
+
+  // --- CONFIGURACIÓN DE CADA GRÁFICO ---
+
+  function createOrUpdateChart(id, config) {
+    if (chartInstances[id]) chartInstances[id].destroy();
+    const ctx = document.getElementById(id).getContext('2d');
+    chartInstances[id] = new Chart(ctx, config);
+  }
+
+  // 1. Ventas por Fecha (Combo Bar + Line)
+  function renderVentasFechaChart(map) {
+    const labels = Object.keys(map);
+    const montos = Object.values(map);
+    let acum = 0;
+    const acumulados = montos.map(m => { acum += m; return acum; });
+
+    createOrUpdateChart('chartVentasFecha', {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'MONTO',
+            data: montos,
+            backgroundColor: isEPaper ? '#000000' : '#4285f4',
+            order: 2
+          },
+          {
+            label: 'ACUMULADO',
+            data: acumulados,
+            borderColor: isEPaper ? '#000000' : '#ea4335',
+            borderWidth: 3,
+            type: 'line',
+            fill: false,
+            order: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'top' } },
+        scales: {
+          y: { ticks: { callback: v => '$' + v.toLocaleString() } }
+        }
+      }
+    });
+  }
+
+  // 2. Monto por Pedido (Barras)
+  function renderMontoClienteBarChart(map) {
+    const labels = Object.keys(map);
+    const montos = Object.values(map);
+
+    createOrUpdateChart('chartMontoClienteBar', {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'USD',
+          data: montos,
+          backgroundColor: isEPaper ? '#000000' : '#4285f4'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { ticks: { callback: v => '$' + v.toLocaleString() } }
+        }
+      }
+    });
+  }
+
+  // 3. Monto por Cliente (Torta / Pie)
+  function renderMontoClientePieChart(map) {
+    createOrUpdateChart('chartMontoClientePie', {
+      type: 'pie',
+      data: {
+        labels: Object.keys(map),
+        datasets: [{
+          data: Object.values(map),
+          backgroundColor: isEPaper ? ['#000', '#666', '#ccc'] : GOOGLE_COLORS
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'right' } }
+      }
+    });
+  }
+
+  // 4. Pedidos por Vendedor Monto (Dona / Doughnut)
+  function renderVendedorMontoChart(map) {
+    createOrUpdateChart('chartVendedorMonto', {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(map),
+        datasets: [{
+          data: Object.values(map),
+          backgroundColor: isEPaper ? ['#000', '#666', '#ccc'] : GOOGLE_COLORS
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'right' } }
+      }
+    });
+  }
+
+  // 5. Cantidad de Pedidos por Vendedor (Dona / Doughnut)
+  function renderVendedorCantidadChart(map) {
+    createOrUpdateChart('chartVendedorCantidad', {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(map),
+        datasets: [{
+          data: Object.values(map),
+          backgroundColor: isEPaper ? ['#000', '#666', '#ccc'] : GOOGLE_COLORS
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'right' } }
+      }
+    });
+  }
+
+  loadDashboard();
+  setInterval(loadDashboard, 300000); // Refresca cada 5 minutos
+</script>
 </body>
 </html>
